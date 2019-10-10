@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,19 +31,9 @@ URL должны обрабатываться параллельно, но не 
 Нужно обойтись без глобальных переменных и использовать только стандартную библиотеку.
 */
 
-// counter with a mutex
-type counter struct {
-	total    int
-	totalMux sync.Mutex
-}
-
-func (c *counter) Add(n int) {
-	c.totalMux.Lock()
-	defer c.totalMux.Unlock()
-	c.total = c.total + n
-}
-
 func main() {
+	// "Go" keyword presense counter
+	var total int64 = 0
 	// allowed goroutines amount
 	gonum := 5
 	// blocking channel
@@ -50,9 +41,6 @@ func main() {
 
 	// wait group to wait for all urls to be parsed
 	wg := new(sync.WaitGroup)
-
-	// "Go" keyword presense counter
-	counter := counter{}
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -106,8 +94,8 @@ func main() {
 			// count "Go" keyword occurrence in the body of the response
 			n := strings.Count(string(page), "Go")
 
-			// add to goroutine safe counter
-			counter.Add(n)
+			// atomically add to total counter
+			total = atomic.AddInt64(&total, int64(n))
 
 			wg.Done()
 
@@ -118,5 +106,5 @@ func main() {
 
 	wg.Wait()
 	// Printout the result
-	fmt.Println(counter.total)
+	fmt.Println(total)
 }
