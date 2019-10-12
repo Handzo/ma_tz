@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ URL должны обрабатываться параллельно, но не 
 func main() {
 	// "Go" keyword presense counter
 	var total int64 = 0
+
 	// allowed goroutines amount
 	gonum := 5
 	// blocking channel
@@ -76,10 +78,21 @@ func main() {
 
 		// start parsing gouroutine
 		go func() {
-			// make http request
-			resp, err := client.Get(urlStr)
+			defer func() {
+				wg.Done()
+				// unblock main goroutine
+				<-block
+			}()
+
+			url, err := url.ParseRequestURI(urlStr)
 			if err != nil {
-				panic(err)
+				return
+			}
+
+			// make http request
+			resp, err := client.Get(url.String())
+			if err != nil {
+				return
 			}
 
 			// close body
@@ -88,23 +101,21 @@ func main() {
 			// read all bytes from response's body
 			page, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				panic(err)
+				return
 			}
 
 			// count "Go" keyword occurrence in the body of the response
 			n := strings.Count(string(page), "Go")
 
+			// Print out amount on certain url
+			fmt.Printf("Url: %s - \"Go\" occurrence: %d\n", url.String(), n)
+
 			// atomically add to total counter
 			total = atomic.AddInt64(&total, int64(n))
-
-			wg.Done()
-
-			// unblock main goroutine
-			<-block
 		}()
 	}
 
 	wg.Wait()
-	// Printout the result
-	fmt.Println(total)
+	// Print out total amount
+	fmt.Println("Total:", total)
 }
